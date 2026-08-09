@@ -1,0 +1,15 @@
+# 复制本文件为 config.yaml 后按需修改。
+# 首次启动若 dashboard_password 留空，会生成随机初始密码并打印到日志，
+# 登录后强制设置新密码；之后改密码走网页控制台侧栏「修改密码」。
+dashboard_username: miloto
+
+# 留空 = 启动生成随机密码；也可填 PBKDF2 哈希（由程序在首次改密时生成）
+dashboard_password: ""
+
+# 网页控制台监听端口
+web_port: 8127
+
+# 启用的插件（仅声明开关，参数在插件自身 manifest / 网页里配）
+plugins:
+  keyword_replacer:
+    enabled: true
