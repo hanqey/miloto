@@ -193,7 +193,7 @@ class Settings:
     @property
     def plugin_market_url(self) -> str:
 
-        return self._pick("plugins.market_url", "https://raw.githubusercontent.com/hanqey/miloto/main/market.json")
+        return self._pick("plugins.market_url", "https://raw.githubusercontent.com/hanqey/miloto/main/market/market.json")
 
     @property
     def log_levels(self) -> dict:
