@@ -265,7 +265,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .pc-title{flex:1;min-width:0}
 .pc-name{font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pc-author{font-size:11px;color:var(--text-soft);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pc-verified{font-size:11px;font-weight:600;color:#2f8f6b;background:#e7f5ee;border:1px solid #bfe3d2;border-radius:8px;padding:1px 7px;margin-left:6px;vertical-align:middle}
+.pc-gh{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text-soft);transition:background .18s ease,border-color .18s ease,color .18s ease}
+.pc-gh:hover{background:#eaf4ef;color:var(--brand-ink);border-color:var(--brand)}
+.pc-gh svg{width:16px;height:16px;fill:currentColor}
 .ce-title{font-weight:600;margin-bottom:6px}
 .ce-sub{font-size:12px;color:var(--text-soft);line-height:1.5}
 .pc-desc{font-size:12px;color:var(--text-soft);line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:38px}
@@ -469,7 +471,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
   <div class="tab-page" id="page-logs">
     <div class="header">
       <h1>运行日志</h1>
-      <div class="badge">内存 · 不落盘</div>
     </div>
     <div class="log-levels" id="logLevels">
       <span class="log-levels-label">日志级别</span>
@@ -1192,10 +1193,7 @@ function marketCardHtml(p) {
   } else {
     action = '<button class="btn btn-pink" onclick="installPlugin(\''+esc(p.name)+'\', false)">安装</button>';
   }
-  var repo = p.repo ? '<a class="pc-link" href="'+esc(p.repo)+'" target="_blank" rel="noopener">查看源码</a>' : '';
-  var badge = p.verified
-    ? '<span class="pc-verified" title="该插件已通过人工审核">✓ 已审核</span>'
-    : '';
+  var repo = p.repo ? '<a class="pc-gh" href="'+esc(p.repo)+'" target="_blank" rel="noopener" title="在 GitHub 查看源码"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg></a>' : '';
   return ''+
   '<div class="plugin-card">'+
     '<div class="pc-head">'+
@@ -1203,7 +1201,7 @@ function marketCardHtml(p) {
       '<div class="pc-title">'+
         '<div class="pc-name">'+esc(p.name)+
           ' <span class="plugin-ver">v'+esc(p.version || '?')+'</span>'+
-          badge +'</div>'+
+          '</div>'+
         '<div class="pc-author">'+(p.author ? ('作者 '+esc(p.author)) : '社区插件')+'</div>'+
       '</div>'+
     '</div>'+

@@ -14,5 +14,10 @@ __pycache__/
 # 本地配置（含口令哈希，勿入仓；交付 config.example.yaml 由使用者自行复制）
 config.yaml
 
-# 作者本地调试脚本（含本机路径，勿入仓）
+# 作者本地调试脚本（含本机路径，勿入仓；开发版专用，sync 时已 SKIP）
 probe_*.py
+tools/dump_*.py
+
+# 打包脚本（开源后无需构建安装包，不入库；本地保留供手动打包用）
+*.iss
+*.spec
