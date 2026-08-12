@@ -9,10 +9,12 @@ import sys
 import threading
 import time
 
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 from core import runtime
+from core import updater
+from core.version import MILOTO_VERSION
 from core.loggingx import build_logger, get_log_lines
 from core.security import hash_password, is_hashed, needs_upgrade, verify_password
 from core.settings import write_path
@@ -169,6 +171,33 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .step-title{font-size:14px;font-weight:600;color:var(--text)}
 .step-desc{font-size:12px;color:var(--text-soft);line-height:1.65}
 
+/* ===== 版本卡片（首页）===== */
+.version-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:12px}
+.version-row{display:flex;align-items:center;gap:12px}
+.version-label{font-size:13px;color:var(--text-soft)}
+.version-value{font-size:15px;font-weight:700;color:var(--brand-ink);font-family:'Quicksand','Segoe UI',sans-serif}
+.version-status{font-size:13px}
+.ver-note{color:var(--text-soft)}
+.ver-error{color:#d9534f}
+.ver-banner{font-size:13px;color:#3f7d63;font-weight:600}
+.version-actions{display:flex;flex-direction:column;gap:8px}
+.ver-item{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--text);background:#f6faf8;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px}
+
+/* 版本更新/回退弹窗（表格） */
+.modal-box.version-modal-box{width:720px;max-width:92vw;text-align:left}
+.version-table{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-top:14px}
+.version-thead{display:grid;grid-template-columns:130px 120px 1fr 110px;gap:12px;padding:11px 16px;background:#f0f6f3;font-size:13px;font-weight:600;color:var(--text-soft)}
+.version-trow{display:grid;grid-template-columns:130px 120px 1fr 110px;gap:12px;padding:11px 16px;font-size:13px;color:var(--text);border-top:1px solid var(--border);align-items:center}
+.version-trow:first-child{border-top:none}
+.vt-ver{font-weight:700;color:var(--brand-ink);font-family:'Quicksand','Segoe UI',sans-serif}
+.vt-ver .vt-badge{display:inline-block;margin-left:8px;font-size:11px;font-weight:600;padding:1px 8px;border-radius:10px;vertical-align:middle}
+.vt-badge.cur{background:#eaf4ef;color:#3f7d63}
+.vt-badge.up{background:#eaf4ef;color:#4e9d7c}
+.vt-badge.down{background:#f1f3f2;color:#9aa6a0}
+.vt-notes{color:var(--text-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vt-action{display:flex;justify-content:flex-end}
+.vt-current{font-size:12px;font-weight:600;color:#3f7d63;background:#eaf4ef;padding:2px 10px;border-radius:10px}
+
 /* ===== 按钮组 ===== */
 .btn{padding:10px 18px;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s ease;display:inline-flex;align-items:center;gap:6px}
 .btn:disabled{opacity:0.4;cursor:not-allowed}
@@ -253,6 +282,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .ptab:hover{color:var(--text)}
 .ptab.active{background:#fff;color:var(--brand-ink);box-shadow:0 1px 4px rgba(94,157,124,0.14)}
 .ptab i{font-style:normal;font-size:11px;font-weight:700;background:var(--brand);color:#fff;border-radius:20px;padding:1px 8px;min-width:18px;text-align:center}
+.basic-nav{align-self:flex-start;margin:0}
 .plugin-search{flex:1;max-width:280px;min-width:160px}
 .plugin-search input{width:100%;padding:9px 14px;border:1.5px solid var(--border);border-radius:11px;font-size:13px;outline:none;background:var(--surface);color:var(--text);font-family:inherit;transition:border .2s,box-shadow .2s}
 .plugin-search input:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(94,157,124,0.12)}
@@ -394,6 +424,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
   </div>
 </div>
 
+<!-- ===== 版本更新 / 回退（表格弹窗）===== -->
+<div class="modal-overlay" id="versionModal" onclick="if(event.target===this)closeVersionModal()">
+  <div class="modal-box version-modal-box">
+    <div class="modal-title">版本更新 / 回退</div>
+    <div class="version-table">
+      <div class="version-thead">
+        <span>版本</span>
+        <span>更新时间</span>
+        <span>说明</span>
+        <span style="text-align:right">操作</span>
+      </div>
+      <div id="versionTableBody"></div>
+    </div>
+    <div id="versionModalStatus" class="ver-note" style="margin-top:14px;"></div>
+  </div>
+</div>
+
 <div class="container">
 
 <!-- ===== 侧边栏（深绿实体面板，NapCat / AstrBot 风格）===== -->
@@ -446,6 +493,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
       <div class="guide-hero">
         <div class="guide-title">微信 &#8596; AstrBot 桥接控制台</div>
         <div class="guide-sub">将微信消息实时转发到 AstrBot，让机器人通过 OneBot v11 回消息。在「连接设置」里添加并启用连接即可开始桥接。</div>
+      </div>
+      <div class="version-card" id="versionCard">
+        <div class="version-row">
+          <span class="version-label">当前版本</span>
+          <span class="version-value" id="currentVersion">v?</span>
+          <button class="btn btn-outline btn-sm" onclick="checkVersion()">检查更新</button>
+        </div>
+        <div class="version-status" id="versionStatus"></div>
       </div>
       <div class="guide-steps">
         <div class="step-card">
@@ -506,6 +561,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
     <div class="header">
       <h1>基础设置</h1>
       <div class="badge">config.yaml</div>
+    </div>
+    <div class="plugin-tabs basic-nav">
+      <button class="ptab active" data-btab="webui" onclick="switchBasicTab('webui')">WebUI 设置</button>
+      <button class="ptab" data-btab="bot" onclick="switchBasicTab('bot')">Bot 设置</button>
     </div>
     <div class="settings-scroll" id="basicForm"></div>
     <div class="save-bar">
@@ -568,6 +627,9 @@ function api(url, opts) {
 }
 function showLogin() {
   clearToken();
+  // 弹回登录层时，必须停掉已存在的状态轮询，否则它会继续发请求→401→再次弹登录，
+  // 形成每 3 秒抢一次焦点的连环，导致用户正在输的密码被截到用户名框。
+  if (_refreshTimer) { clearInterval(_refreshTimer); _refreshTimer = null; _appStarted = false; }
   var m = document.getElementById('loginMask');
   if (m) m.style.display = 'flex';
   var err = document.getElementById('loginErr');
@@ -576,8 +638,16 @@ function showLogin() {
   if (err2) err2.textContent = '';
   document.getElementById('loginForm').style.display = 'flex';   // .login-form 是竖排 flex，不能用 block
   document.getElementById('forceForm').style.display = 'none';
-  var u = document.getElementById('loginUser');
-  if (u) u.focus();
+  // 仅「首次展示登录层」时主动聚焦，避免重连/401 重新弹回时抢走用户正在输入的密码框焦点：
+  // - 用户名已填过（如刷新后浏览器回填）→ 聚焦密码框，让后续输入进密码而非用户名
+  // - 否则聚焦用户名框
+  if (!_loginShown) {
+    _loginShown = true;
+    var u = document.getElementById('loginUser');
+    var p = document.getElementById('loginPass');
+    if (u && u.value && p) p.focus();
+    else if (u) u.focus();
+  }
 }
 function doLogin() {
   var u = document.getElementById('loginUser');
@@ -711,6 +781,125 @@ function switchTab(name, navKey) {
   if (name === 'basic') loadConfig();
   if (name === 'plugin') { loadPlugins(); pluginSubTab('installed'); }
   if (name === 'logs') refresh(true);   // 切到日志页立即拉最新并滚到底部（看最新日志）
+  if (name === 'home') loadVersion();
+}
+
+// ===== 版本更新 / 回退（像 NapCat / AstrBot 那样）=====
+function loadVersion() {
+  api('/api/version').then(function(r){return r.json()}).then(function(res){
+    // 先把版本号填上，避免一直显示 v?
+    document.getElementById('currentVersion').textContent = 'v' + (res.current || '?');
+    var status = document.getElementById('versionStatus');
+    var actions = document.getElementById('versionActions');
+    actions.innerHTML = '';
+    status.innerHTML = '<span class="ver-note">点击「检查更新」查看远程版本。</span>';
+  }).catch(function(){});
+}
+
+function compareVersions(a, b) {
+  // 简单语义化比较：b 是否比 a 更新（只比数字段）。返回 true 表示 b 更新。
+  function parts(version) { return (version.match(/\d+/g) || []).map(Number); }
+  var pa = parts(a), pb = parts(b);
+  for (var i = 0; i < Math.max(pa.length, pb.length); i++) {
+    var x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return y > x;
+  }
+  return false;
+}
+
+function openVersionModal() {
+  document.getElementById('versionModal').classList.add('show');
+}
+function closeVersionModal() {
+  document.getElementById('versionModal').classList.remove('show');
+}
+
+function checkVersion() {
+  var status = document.getElementById('versionStatus');
+  var mstatus = document.getElementById('versionModalStatus');
+  var body = document.getElementById('versionTableBody');
+  status.innerHTML = '<span class="ver-note">正在检查更新…</span>';
+  mstatus.innerHTML = '正在检查更新…';
+  body.innerHTML = '';
+  openVersionModal();
+  api('/api/version/check', {method:'POST'}).then(function(r){return r.json()}).then(function(res){
+    if (!res.ok) {
+      var msg = res.error || '检查失败';
+      status.innerHTML = '<span class="ver-note ver-error">' + esc(msg) + '</span>';
+      mstatus.innerHTML = '<span class="ver-error">' + esc(msg) + '</span>';
+      return;
+    }
+    status.innerHTML = '';
+    mstatus.innerHTML = '';
+    renderVersionTable(res);
+  }).catch(function(){
+    mstatus.innerHTML = '<span class="ver-error">检查更新出错</span>';
+  });
+}
+
+function renderVersionTable(res) {
+  var current = res.current;
+  var list = res.versions || [];
+  var body = document.getElementById('versionTableBody');
+  body.innerHTML = '';
+  if (!list.length) {
+    body.innerHTML = '<div class="version-trow"><span class="vt-notes">没有可用的远程版本。</span></div>';
+    return;
+  }
+  list.forEach(function(v){
+    var badge = '', action = '';
+    if (v.version === current) {
+      badge = '<span class="vt-badge cur">当前</span>';
+      // 操作列对当前运行版本只标注「当前」，不放按钮
+      action = '<span class="vt-current">当前</span>';
+    } else if (compareVersions(current, v.version)) {
+      badge = '<span class="vt-badge up">新</span>';
+      action = '<button class="btn btn-outline btn-sm" onclick="doUpdate(\'' + esc(v.version) + '\')">更新到</button>';
+    } else {
+      badge = '<span class="vt-badge down">旧</span>';
+      action = '<button class="btn btn-outline btn-sm" onclick="doRollback(\'' + esc(v.version) + '\')">回退到</button>';
+    }
+    var row = document.createElement('div');
+    row.className = 'version-trow';
+    row.innerHTML =
+        '<span class="vt-ver">v' + esc(v.version) + ' ' + badge + '</span>'
+      + '<span class="vt-date">' + esc(v.updated_at || '-') + '</span>'
+      + '<span class="vt-notes" title="' + esc(v.notes || '') + '">' + esc(v.notes || '-') + '</span>'
+      + '<span class="vt-action">' + action + '</span>';
+    body.appendChild(row);
+  });
+}
+
+function doUpdate(tag) {
+  toast('正在更新到 ' + tag + '…', 'success');
+  api('/api/version/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({target: tag})})
+    .then(function(r){return r.json()}).then(function(res){
+      if (!res.ok) {
+        var detail = res.message || res.error || '更新失败';
+        console.error('[更新失败]', detail);
+        toast(detail, 'error');
+        return;
+      }
+      closeVersionModal();
+      toast(res.message || '已就绪', 'success');
+      showRestartPrompt();
+    }).catch(function(){ toast('更新请求失败', 'error'); });
+}
+
+function doRollback(tag) {
+  toast('正在回退到 ' + tag + '…', 'success');
+  api('/api/version/rollback', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({target: tag})})
+    .then(function(r){return r.json()}).then(function(res){
+      if (!res.ok) {
+        var detail = res.message || res.error || '回退失败';
+        console.error('[回退失败]', detail);
+        toast(detail, 'error');
+        return;
+      }
+      closeVersionModal();
+      toast(res.message || '已就绪', 'success');
+      showRestartPrompt();
+    }).catch(function(){ toast('回退请求失败', 'error'); });
 }
 
 // ===== 面板刷新（日志 + 连接状态）=====
@@ -764,22 +953,25 @@ function toggleLevel(level, on) {
 
 // ===== 配置表单（基础设置，Miloto 真实键）=====
 var FORM_BASIC = [
-  {title:'机器人', fields:[
-    {key:'bot.names', label:'机器人昵称（多个用逗号隔开）', type:'text', ph:'Miloto'},
-    {key:'bot.wxid', label:'机器人 wxid', type:'text', ph:'wxid_xxx'},
+  {tab:'webui', title:'控制台登录', fields:[
+    {key:'dashboard.username', label:'控制台用户名', type:'text', ph:'miloto', hint:'修改登录密码请使用侧边栏「修改密码」'},
   ]},
-  {title:'Web 监听', fields:[
+  {tab:'webui', title:'Web 监听', fields:[
     {key:'web.host', label:'Web 监听地址（需重启生效）', type:'select', opts:[{v:'0.0.0.0',l:'0.0.0.0（允许公网访问）'},{v:'127.0.0.1',l:'127.0.0.1（仅本机访问）'}]},
     {key:'web.port', label:'Web 面板端口（需重启生效）', type:'number', ph:'8127'},
   ]},
-  {title:'文件存储', fields:[
+  {tab:'bot', title:'机器人', fields:[
+    {key:'bot.names', label:'机器人昵称（多个用逗号隔开）', type:'text', ph:'Miloto'},
+    {key:'bot.wxid', label:'机器人 wxid', type:'text', ph:'wxid_xxx'},
+  ]},
+  {tab:'bot', title:'文件存储', fields:[
     {key:'files.storage_dir', label:'文件存放文件夹', type:'text', ph:'C:/miloto/files', hint:'微信文件存放地点,如 C:\\Users\\user\\xwechat_files\\wxid\\msg\\file'},
   ]},
-  {title:'媒体缓存', fields:[
+  {tab:'bot', title:'媒体缓存', fields:[
     {key:'attachments', label:'媒体缓存目录（图片/文件临时落点，改后需重启）', type:'text', ph:'C:/miloto/attachments'},
   ]},
-  {title:'控制台登录', fields:[
-    {key:'dashboard.username', label:'控制台用户名', type:'text', ph:'miloto', hint:'修改登录密码请使用侧边栏「修改密码」'},
+  {tab:'bot', title:'发送优化', fields:[
+    {key:'sender.session_cache', label:'会话缓存（连续发给同一人时跳过重切会话，明显提速；但微信 4.x 自绘无法确认当前是否仍在该会话，期间若被自动跳走可能发错人，默认关闭）', type:'switch'},
   ]},
 ];
 
@@ -803,6 +995,8 @@ function fieldHtml(f, cfg) {
     h += '<select id="cfg_' + f.key + '">';
     f.opts.forEach(function(o){h += '<option value="' + o.v + '"' + (val==o.v?' selected':'') + '>' + o.l + '</option>'});
     h += '</select>';
+  } else if (f.type === 'switch') {
+    h += '<label class="switch"><input type="checkbox" id="cfg_' + f.key + '"' + (val ? ' checked' : '') + '><span class="slider"></span></label>';
   } else if (f.type === 'number') {
     h += '<input type="number" id="cfg_' + f.key + '" value="' + val + '" placeholder="' + (f.ph||'') + '" data-def="' + (f.ph||'') + '">';
   } else {
@@ -815,11 +1009,29 @@ function fieldHtml(f, cfg) {
 function renderForm(containerId, groups, cfg) {
   var html = '';
   groups.forEach(function(g){
-    html += '<div class="settings-group"><h3>' + g.title + '</h3><div class="settings-row">';
+    var tabAttr = g.tab ? (' data-tab="' + g.tab + '"') : '';
+    html += '<div class="settings-group"' + tabAttr + '><h3>' + g.title + '</h3><div class="settings-row">';
     g.fields.forEach(function(f){ html += fieldHtml(f, cfg); });
     html += '</div></div>';
   });
   document.getElementById(containerId).innerHTML = html;
+  applyBasicTab();
+}
+// 基础设置页顶部分组：webui / bot 两个子页，always 类分组（如发送优化）始终显示
+var _basicTab = 'webui';
+function switchBasicTab(tab) {
+  _basicTab = tab;
+  document.querySelectorAll('.basic-nav .ptab').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-btab') === tab);
+  });
+  applyBasicTab();
+}
+function applyBasicTab() {
+  document.querySelectorAll('#basicForm .settings-group').forEach(function(g){
+    var t = g.getAttribute('data-tab');
+    var show = (t === 'always') || (!t) || (t === _basicTab);
+    g.style.display = show ? '' : 'none';
+  });
 }
 function loadConfig() {
   api('/api/config').then(function(r){return r.json()}).then(function(cfg){
@@ -835,7 +1047,12 @@ function saveConfig(page) {
   var data = {};
   fields.forEach(function(el){
     var key = el.id.replace('cfg_','');
-    var val = el.value.trim();
+    var val;
+    if (el.type === 'checkbox') {
+      val = el.checked;
+    } else {
+      val = el.value.trim();
+    }
     if (el.type === 'number') {
       if (val === '') {
         // 数字框留空时别写 0，回退到 placeholder 上的默认值（比如端口的 8127）
@@ -1373,12 +1590,15 @@ function doRestart() {
 
 // ===== 初始化 =====
 var _appStarted = false;
+var _refreshTimer = null;
+var _loginShown = false;
 function startAppLoop() {
   // 避免重复启动轮询（登出再登录时仍复用已有定时器）
   if (_appStarted) return;
   _appStarted = true;
   refresh();
-  setInterval(refresh, 3000);
+  loadVersion();   // 进入控制台即拉取当前版本与更新入口，避免一直显示 v?
+  _refreshTimer = setInterval(refresh, 3000);
 }
 function bootApp() {
   // 已登录则判断是否需强制改密；否则显示登录层（遮罩默认可见）
@@ -1402,6 +1622,13 @@ bootApp();
 
 class WebHandler(BaseHTTPRequestHandler):
 
+    def handle_error(self, request, client_address):
+
+        exc = sys.exc_info()[1]
+        if isinstance(exc, (ConnectionAbortedError, BrokenPipeError, ConnectionResetError)):
+            return
+        super().handle_error(request, client_address)
+
     def do_GET(self):
 
         if self.path == "/api/auth-state":
@@ -1422,6 +1649,8 @@ class WebHandler(BaseHTTPRequestHandler):
             self._serve_plugins()
         elif self.path == "/api/plugins/market":
             self._serve_plugins_market()
+        elif self.path == "/api/version":
+            self._serve_version()
         else:
 
             self.send_response(200)
@@ -1475,6 +1704,12 @@ class WebHandler(BaseHTTPRequestHandler):
             self._serve_change_password()
         elif self.path == "/api/restart":
             self._serve_restart()
+        elif self.path == "/api/version/check":
+            self._serve_version_check()
+        elif self.path == "/api/version/update":
+            self._serve_version_update()
+        elif self.path == "/api/version/rollback":
+            self._serve_version_rollback()
 
         else:
             self.send_json({"ok": False}, 404)
@@ -1672,14 +1907,14 @@ class WebHandler(BaseHTTPRequestHandler):
                 return
             installed = {p["name"]: p for p in _ENGINE.list_plugins()}
             out = []
-            for item in market:
-                name = item.get("name", "")
+            for plugin in market:
+                name = plugin.get("name", "")
                 inst = installed.get(name)
-                entry = dict(item)
+                entry = dict(plugin)
                 entry["installed"] = inst is not None
                 entry["installed_version"] = inst.get("version", "") if inst else ""
                 entry["updatable"] = bool(inst) and self._version_gt(
-                    item.get("version", ""), inst.get("version", ""))
+                    plugin.get("version", ""), inst.get("version", ""))
                 out.append(entry)
             self.send_json({"status": "ok", "plugins": out})
         except Exception as e:
@@ -1861,8 +2096,87 @@ class WebHandler(BaseHTTPRequestHandler):
                 srv.server_close()
         except Exception:
             pass
+
+        try:
+            applied, message = updater.apply_pending_update(updater.running_directory())
+            if applied:
+                log.info(f"[Web] {message}")
+        except Exception as error:
+            log.error(f"[Web] 应用更新失败: {error}")
+
         python = sys.executable
         os.execv(python, [python] + sys.argv)
+
+    def _serve_version(self):
+
+        settings = _ENGINE.settings
+        self.send_json({
+            "current": MILOTO_VERSION,
+            "updater": {
+                "repo": settings.get("updater.repo", "hanqey/miloto"),
+                "branch": settings.get("updater.branch", "main"),
+                "mirror": settings.get("updater.mirror", ""),
+                "enabled": bool(settings.get("updater.enabled", True)),
+            },
+            "backups": updater.list_backups(),
+        })
+
+    def _serve_version_check(self):
+
+        settings = _ENGINE.settings
+        try:
+            versions = updater.fetch_version_manifest(settings)
+        except Exception as error:
+            log.error(f"[Web] 检查版本更新失败: {error}")
+            message = f"检查更新失败：{error}"
+
+            if any(k in str(error).lower() for k in ("urlopen", "timeout", "getaddrinfo", "connection", "timed out", "name or service")):
+                message += "（版本清单与插件市场同域，若市场能连这里却不行，多为代理或镜像配置问题：可在 config.yaml 配置 updater.proxy 走代理，或填 updater.mirror 用镜像源）"
+            self.send_json({"ok": False, "error": message})
+            return
+        latest = versions[0]["version"] if versions else MILOTO_VERSION
+        self.send_json({
+            "ok": True,
+            "current": MILOTO_VERSION,
+            "latest": latest,
+            "updatable": updater.compare_versions(MILOTO_VERSION, latest),
+            "versions": versions,
+            "backups": updater.list_backups(),
+        })
+
+    def _serve_version_update(self):
+
+        body = self._read_body()
+        target = (body.get("target") or "").strip()
+        if not target:
+            self.send_json({"ok": False, "message": "未指定目标版本。"}, 400)
+            return
+        try:
+            ok, message, target_version = updater.prepare_update(_ENGINE.settings, target)
+        except Exception as error:
+            log.error(f"[Web] 更新失败（目标 {target}）: {error}")
+            self.send_json({"ok": False, "message": f"更新失败：{error}"})
+            return
+        if not ok:
+            log.error(f"[Web] 更新失败（目标 {target}）: {message}")
+        self.send_json({"ok": ok, "message": message, "target_version": target_version})
+
+    def _serve_version_rollback(self):
+
+        body = self._read_body()
+        target = (body.get("target") or "").strip()
+        if not target:
+            self.send_json({"ok": False, "message": "未指定目标版本。"}, 400)
+            return
+        try:
+            ok, message, target_version = updater.prepare_rollback(_ENGINE.settings, target)
+        except Exception as error:
+            log.error(f"[Web] 回退失败（目标 {target}）: {error}")
+            self.send_json({"ok": False, "message": f"回退失败：{error}"})
+            return
+        if not ok:
+            log.error(f"[Web] 回退失败（目标 {target}）: {message}")
+        self.send_json({"ok": ok, "message": message, "target_version": target_version})
 
     def send_json(self, data, code=200):
         self.send_response(code)
@@ -1888,7 +2202,7 @@ def start_web(engine) -> HTTPServer:
     port = engine.settings.web_port
 
     ensure_port_free(host, port, "网页控制台")
-    server = HTTPServer((host, port), WebHandler)
+    server = ThreadingHTTPServer((host, port), WebHandler)
     threading.Thread(target=server.serve_forever, daemon=True, name="web").start()
     engine.web_server = server
     print_startup_banner(host, port)

@@ -52,8 +52,7 @@ class Scheduler(Extension):
         contact, text = job["contact"], job["text"]
         if not contact or not text:
             return
-        threading.Thread(target=self.ctx.sender.send_text,
-                         args=(contact, text), daemon=True).start()
+        self.ctx.sender.enqueue("text", contact, text)
 
     def on_outbound(self, req) -> bool | None:
 
@@ -80,8 +79,7 @@ class Scheduler(Extension):
                     log.warning("收到原图命令，但 origimg 扩展未启用")
             elif action == "echo":
                 if arg:
-                    threading.Thread(target=self.ctx.sender.send_text,
-                                     args=(contact, arg), daemon=True).start()
+                    self.ctx.sender.enqueue("text", contact, arg)
             else:
                 log.info(f"未知命令动作: {action}")
             return True

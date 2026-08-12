@@ -531,13 +531,16 @@ class InboundRelay:
             gid = wxid_to_int(entry["group"] or contact)
             sname = entry["sender"] or entry["source"] or "未知"
             uid = wxid_to_int(f"{entry['group']}_{sname}")
+
             clean = combined
+            segs = []
             for nick in self.settings.bot_names:
-                clean = clean.replace(f"@{nick}", "").strip()
-            formatted = f'{sname}在群{entry["group"]}中说：{clean}' if (sname and clean) else clean
-            segs = [{"type": "at", "data": {"qq": str(runtime.self_id)}}]
-            if formatted:
-                segs.append({"type": "text", "data": {"text": f" {formatted}"}})
+                if f"@{nick}" in clean:
+
+                    segs.append({"type": "at", "data": {"qq": int(runtime.self_id)}})
+                    clean = clean.replace(f"@{nick}", "").strip()
+            if clean:
+                segs.append({"type": "text", "data": {"text": clean}})
             for im in imgs:
                 segs.append({"type": "image", "data": {"file": im['url']}})
             for fl in files:

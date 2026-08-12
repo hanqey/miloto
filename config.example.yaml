@@ -1,15 +1,63 @@
-# 复制本文件为 config.yaml 后按需修改。
-# 首次启动若 dashboard_password 留空，会生成随机初始密码并打印到日志，
-# 登录后强制设置新密码；之后改密码走网页控制台侧栏「修改密码」。
-dashboard_username: miloto
+# Miloto 配置样例
+# ---------------------------------------------------------------------------
+# 这是一份配置模板，把本文件复制为 config.yaml 后按实际情况修改即可。
+# 没有写的键会走默认值，不影响启动。
+# 注意：dashboard.password 存的是哈希串，手改设不了密码，
+#       想改密码请到网页控制台「修改密码」里操作。
+# ---------------------------------------------------------------------------
 
-# 留空 = 启动生成随机密码；也可填 PBKDF2 哈希（由程序在首次改密时生成）
-dashboard_password: ""
+# 网页控制台登录
+dashboard:
+  username: miloto
+  # 留空则启动时随机生成初始密码（打印在启动横幅上），首次登录后强制改密
+  password: ""
 
-# 网页控制台监听端口
-web_port: 8127
+# 网页控制台监听
+web:
+  host: 0.0.0.0          # 0.0.0.0 允许局域网/公网访问；仅本机用 127.0.0.1
+  port: 8127
 
-# 启用的插件（仅声明开关，参数在插件自身 manifest / 网页里配）
+# 机器人自身
+bot:
+  names:                # 机器人微信昵称，多个用逗号分隔；用于识别「自己发的消息」
+    - Miloto
+  wxid: ""              # 机器人微信 id，如 wxid_xxxx
+
+# 文件与媒体
+files:
+  storage_dir: "C:/miloto/files"   # 微信文件落盘目录
+attachments: "C:/miloto/attachments"   # 图片/文件临时缓存目录，改后需重启
+
+# 消息处理
+buffer_seconds: 2       # 入站合并窗口（秒），想近乎即时可设 1
+sender:
+  session_cache: false  # 会话缓存：连续发给同一人跳过重切会话（提速但有发错人风险）
+
+# 连接（多连接模型，可创建多个、单独开关）
+connections:
+  onebot:
+    - name: AstrBot
+      url: "ws://127.0.0.1:19777"
+      token: ""
+      enable: true
+  weflow:
+    - name: WeFlow
+      url: "http://127.0.0.1:5031"
+      token: ""
+      enable: true
+
+# 插件
 plugins:
-  keyword_replacer:
-    enabled: true
+  market_url: ""        # 插件市场远程索引地址，留空用内置默认
+
+# 版本自更新（像 NapCat / AstrBot 那样在控制台检查更新、一键更新或回退）
+# 版本清单来自仓库里的 version.json，默认经 raw.githubusercontent.com 读取，
+# 与插件市场同一域，国内网络通常可达。
+updater:
+  enabled: true         # 是否启用在线更新
+  repo: "hanqey/miloto" # 版本清单来源仓库（GitHub owner/repo）
+  branch: "main"        # version.json 所在分支
+  mirror: ""            # 可选：镜像站根地址，用于替换 raw.githubusercontent.com 根，国内访问不稳时填写
+  proxy: ""             # 可选：代理地址（如 http://127.0.0.1:7890），需要代理才能联网时填写；不填则读系统 HTTPS_PROXY 环境变量
+  proxy: ""             # 可选：检查更新/下载所需的代理地址（如 http://127.0.0.1:7890）；
+                        #   留空则自动读取系统环境变量 HTTPS_PROXY / https_proxy

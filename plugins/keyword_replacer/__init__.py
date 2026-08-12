@@ -33,8 +33,8 @@ class KeywordReplacer(Star):
     def _collect_rules(cfg: dict):
 
         rules = []
-        for item in (cfg.get("rules") or []):
-            source = item.get("from")
+        for rule in (cfg.get("rules") or []):
+            source = rule.get("from")
             if source:
-                rules.append((source, item.get("to") or ""))
+                rules.append((source, rule.get("to") or ""))
         return rules

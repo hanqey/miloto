@@ -4,6 +4,7 @@ import os
 import random
 import time
 import threading
+import queue
 import ctypes
 from ctypes import wintypes
 
@@ -40,21 +41,27 @@ class INPUT(ctypes.Structure):
 
 log = build_logger("miloto.typist")
 
-_CHUNK = 8
-_TYPE_DELAY = (0.02, 0.08)
-_MSG_GAP = (0.6, 1.4)
-_COOLDOWN = 1.0
+_MSG_GAP = (0.15, 0.5)
+_COOLDOWN = 0.3
 _MAX_PER_MIN = 20
-_SPLIT_LEN = 200
+_SESSION_TTL = 10
 
 class WeChatSender:
-    def __init__(self):
+    def __init__(self, settings=None):
+
+        self._settings = settings
         self._window = None
         self._ready = False
         self._lock = threading.Lock()
         self._last_send = 0.0
         self._minute_count = 0
         self._minute_ts = time.time()
+        self.last_contact = None
+        self.last_send_ts = 0.0
+
+        self._outbox = queue.Queue()
+        self._worker = None
+        self._worker_started = False
 
     def send_text(self, contact: str, text: str) -> bool:
         if not self._ensure(contact):
@@ -62,33 +69,99 @@ class WeChatSender:
 
         if not self._ensure_foreground():
             log.warning("[键盘] 发送前微信未置前，正文可能未进入输入框")
-        for piece in self._split(text):
-            if not self._type(piece):
-                return False
-            self._throttle()
+
+        if not self._type(text):
+            return False
         log.debug(f"[键盘] 已粘贴正文({len(text)}字)，准备回车发送（屏幕输入框应显示该内容）")
+        self._throttle()
 
         try:
             self._send_input(VK_RETURN)
-            time.sleep(0.3)
+            time.sleep(0.2)
         except Exception as exc:
             log.error(f"发送回车失败: {exc}")
             return False
+        self.last_contact = contact
+        self.last_send_ts = time.time()
         return True
 
     def send_image(self, contact: str, path: str) -> bool:
         if not self._ensure(contact):
             return False
-        return self._paste_file(contact, path, is_video=False)
+        ok = self._paste_file(contact, path, is_video=False)
+        if ok:
+            self.last_contact = contact
+            self.last_send_ts = time.time()
+            self._clean_temp(path)
+        return ok
 
     def send_voice(self, contact: str, path: str) -> bool:
         if not self._ensure(contact):
             return False
-        return self._paste_file(contact, path, is_video=False)
+        ok = self._paste_file(contact, path, is_video=False)
+        if ok:
+            self.last_contact = contact
+            self.last_send_ts = time.time()
+            self._clean_temp(path)
+        return ok
 
     def open_chat(self, contact: str) -> bool:
 
-        return self._ensure(contact)
+        with self._lock:
+            return self._ensure(contact)
+
+    def enqueue(self, kind: str, contact: str, payload) -> None:
+
+        if not self._worker_started:
+            with self._lock:
+                if not self._worker_started:
+                    self._start_worker()
+        self._outbox.put((kind, contact, payload))
+
+    def _start_worker(self) -> None:
+        self._worker = threading.Thread(
+            target=self._run_worker, name="wechat-sender", daemon=True
+        )
+        self._worker_started = True
+        self._worker.start()
+
+    def _run_worker(self) -> None:
+
+        while True:
+            if paused.is_set():
+                time.sleep(0.3)
+                continue
+            try:
+                kind, contact, payload = self._outbox.get(timeout=0.5)
+            except queue.Empty:
+                continue
+
+            if paused.is_set():
+                self._outbox.put((kind, contact, payload))
+                time.sleep(0.3)
+                continue
+            try:
+                with self._lock:
+                    if kind == "text":
+                        self.send_text(contact, payload)
+                    elif kind == "image":
+                        self.send_image(contact, payload)
+                    elif kind == "voice":
+                        self.send_voice(contact, payload)
+                    else:
+                        log.warning(f"发送队列遇到未知类型: {kind}")
+            except Exception as exc:
+                log.error(f"发送队列处理失败: {exc}")
+            finally:
+                self._outbox.task_done()
+
+    def _clean_temp(self, path: str) -> None:
+
+        if path and "tmp" in path:
+            try:
+                os.unlink(path)
+            except Exception:
+                pass
 
     def _throttle(self) -> None:
 
@@ -102,12 +175,6 @@ class WeChatSender:
         gap = _COOLDOWN + random.uniform(*_MSG_GAP)
         time.sleep(gap)
 
-    def _split(self, text: str):
-
-        if len(text) <= _SPLIT_LEN:
-            return [text]
-        return [text[i:i + _SPLIT_LEN] for i in range(0, len(text), _SPLIT_LEN)]
-
     def _ensure(self, contact: str) -> bool:
         from core import runtime
         if runtime.paused.is_set():
@@ -117,6 +184,13 @@ class WeChatSender:
             self._ready = self._window is not None
         if not self._ready:
             return False
+
+        cache_on = bool(self._settings.get("sender.session_cache", False)) if self._settings else False
+        if (cache_on and self.last_contact == contact
+                and (time.time() - self.last_send_ts) < _SESSION_TTL):
+            if self._ensure_foreground():
+                return True
+            log.warning("[会话缓存] 微信未置前，降级为完整切会话")
         return self._switch_contact(contact)
 
     def _switch_contact(self, contact: str) -> bool:

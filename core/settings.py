@@ -173,7 +173,12 @@ class Settings:
     @property
     def buffer_seconds(self) -> float:
 
-        return float(self._pick("buffer_seconds", 5))
+        return float(self._pick("buffer_seconds", 2))
+
+    @property
+    def sender_session_cache(self) -> bool:
+
+        return bool(self._pick("sender.session_cache", False))
 
     @property
     def attachments(self) -> str:
@@ -193,7 +198,7 @@ class Settings:
     @property
     def plugin_market_url(self) -> str:
 
-        return self._pick("plugins.market_url", "https://raw.githubusercontent.com/hanqey/miloto/main/market/market.json")
+        return self._pick("plugins.market_url", "https://raw.githubusercontent.com/hanqey/miloto/main/upjson/market.json")
 
     @property
     def log_levels(self) -> dict:

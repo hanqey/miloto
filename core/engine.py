@@ -34,10 +34,10 @@ TICK_INTERVAL = 5
 def find_plugin_class(mod):
 
     for attr in dir(mod):
-        obj = getattr(mod, attr)
-        if (isinstance(obj, type) and issubclass(obj, Extension)
-                and obj is not Extension and obj.__module__ == mod.__name__):
-            return obj
+        klass = getattr(mod, attr)
+        if (isinstance(klass, type) and issubclass(klass, Extension)
+                and klass is not Extension and klass.__module__ == mod.__name__):
+            return klass
     return None
 
 def plugins_directory() -> str:
@@ -251,7 +251,7 @@ class Engine:
         runtime.self_id = wxid_to_int(self.settings.bot_wxid) if self.settings.bot_wxid else 10001
 
         self.bus = EventBus()
-        self.sender = WeChatSender()
+        self.sender = WeChatSender(settings=self.settings)
         self.outbound = OutboundHandler(self.settings, self.sender)
 
         self.onebot_clients = {}
@@ -550,8 +550,8 @@ class Engine:
             return False, "名称不能为空"
         connections = self._read_connections(kind)
         existing_index = None
-        for index, item in enumerate(connections):
-            if item.get("name") == name:
+        for index, conn in enumerate(connections):
+            if conn.get("name") == name:
                 existing_index = index
                 break
         entry = {
@@ -598,8 +598,8 @@ class Engine:
 
     def delete_connection(self, kind: str, name: str) -> bool:
 
-        remaining = [item for item in self._read_connections(kind)
-                     if item.get("name") != name]
+        remaining = [conn for conn in self._read_connections(kind)
+                     if conn.get("name") != name]
         self._save_connections(kind, remaining)
         log.info(f"删除连接: [{kind}] 名称={name}")
         self._sync_connections(kind)
@@ -608,9 +608,9 @@ class Engine:
     def set_connection_enabled(self, kind: str, name: str, enable: bool) -> bool:
 
         connections = self._read_connections(kind)
-        for item in connections:
-            if item.get("name") == name:
-                item["enable"] = enable
+        for conn in connections:
+            if conn.get("name") == name:
+                conn["enable"] = enable
                 log.info(f"切换连接开关: [{kind}] 名称={name} → {'启用' if enable else '停用'}")
                 break
         else:

@@ -23,7 +23,7 @@ def push_file(pusher, settings, contact: str, path: str) -> bool:
         from core import runtime
         gid = wxid_to_int(contact)
         uid = gid
-        at_seg = [{"type": "at", "data": {"qq": str(runtime.self_id)}}]
+        at_seg = [{"type": "at", "data": {"qq": int(runtime.self_id)}}]
         event = build_message_event(
             "group", uid, at_seg + segs, group_id=gid,
             group_name=contact, nickname=contact,

@@ -3,6 +3,7 @@
 import asyncio
 import json
 import threading
+import time
 
 import websockets
 
@@ -106,6 +107,16 @@ class OneBotClient:
                 async with websockets.connect(self.url, **ws_kwargs) as ws:
                     self._ws = ws
                     log.info(f"[{self.name}] 已连接到 AstrBot（连接开启）")
+
+                    await self._send_meta({
+                        "time": int(time.time()),
+                        "self_id": self.self_id,
+                        "post_type": "meta_event",
+                        "meta_event_type": "lifecycle",
+                        "sub_type": "connect",
+                    })
+
+                    hb_task = asyncio.ensure_future(self._heartbeat_loop())
                     try:
                         async for raw in ws:
 
@@ -123,6 +134,9 @@ class OneBotClient:
 
                         if self._ws is ws:
                             self._ws = None
+
+                        if not hb_task.done():
+                            hb_task.cancel()
             except websockets.exceptions.ConnectionClosed as exc:
                 dropped = True
                 log.warning(f"[{self.name}] 连接已断开 (code={exc.code})")
@@ -170,3 +184,30 @@ class OneBotClient:
         except Exception as exc:
             log.warning(f"[{self.name}] 推送事件失败: {exc}")
             return False
+
+    async def _send_meta(self, meta: dict) -> None:
+
+        if not self._ws:
+            return
+        try:
+            await self._ws.send(json.dumps(meta, ensure_ascii=False))
+        except Exception as exc:
+            log.warning(f"[{self.name}] 发送 meta_event 失败: {exc}")
+
+    async def _heartbeat_loop(self) -> None:
+
+        try:
+            while self._active and runtime.running and self._ws is not None:
+                await asyncio.sleep(self.heartbeat)
+                await self._send_meta({
+                    "time": int(time.time()),
+                    "self_id": self.self_id,
+                    "post_type": "meta_event",
+                    "meta_event_type": "heartbeat",
+                    "status": {"online": True},
+                    "interval": self.heartbeat * 1000,
+                })
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass

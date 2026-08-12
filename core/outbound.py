@@ -1,8 +1,6 @@
 
 
-import asyncio
 import base64
-import os
 
 from core.runtime import contact_map
 from core.loggingx import build_logger
@@ -30,39 +28,20 @@ class OutboundHandler:
             if seg_type == "text":
                 text = seg_data.get("text", "")
                 if text:
-                    await asyncio.to_thread(self.sender.send_text, contact, text)
+                    self.sender.enqueue("text", contact, text)
             elif seg_type == "image":
-                await self._send_image(contact, seg_data.get("file", ""))
+                self._enqueue_file(contact, seg_data.get("file", ""), "image")
             elif seg_type == "face":
-                await asyncio.to_thread(self.sender.send_text, contact, "[表情]")
+                self.sender.enqueue("text", contact, "[表情]")
             elif seg_type == "record":
-                await self._send_voice(contact, seg_data.get("file", ""))
+                self._enqueue_file(contact, seg_data.get("file", ""), "voice")
 
-    async def _send_image(self, contact: str, file_val: str) -> None:
-        path = self._resolve_file(file_val, decode_base64_image)
+    def _enqueue_file(self, contact: str, file_val: str, kind: str) -> None:
+
+        path = self._resolve_file(file_val, decode_base64_image if kind == "image" else decode_base64_audio)
         if not path:
             return
-        try:
-            await asyncio.to_thread(self.sender.send_image, contact, path)
-        finally:
-            if path and "tmp" in path:
-                try:
-                    os.unlink(path)
-                except Exception:
-                    pass
-
-    async def _send_voice(self, contact: str, file_val: str) -> None:
-        path = self._resolve_file(file_val, decode_base64_audio)
-        if not path:
-            return
-        try:
-            await asyncio.to_thread(self.sender.send_voice, contact, path)
-        finally:
-            if path and "tmp" in path:
-                try:
-                    os.unlink(path)
-                except Exception:
-                    pass
+        self.sender.enqueue(kind, contact, path)
 
     @staticmethod
     def _resolve_file(file_val: str, decode_fn):
