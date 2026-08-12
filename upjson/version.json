@@ -1,12 +1,9 @@
 {
   "latest": "1.1.0",
-  "updated_at": "2026-08-11",
-  "notes": "当前发布版本。",
   "versions": [
     {
       "version": "1.1.0",
-      "tag": "v1.1.0",
-      "name": "Miloto 1.1.0",
+      "updated_at": "2026-08-11",
       "notes": "测试",
       "download_url": "https://github.com/hanqey/miloto/archive/refs/tags/v1.1.0.zip"
     }
