@@ -3,9 +3,15 @@
   "versions": [
     {
       "version": "1.1.0",
-      "updated_at": "2026-08-11",
-      "notes": "测试",
+      "updated_at": "2026-08-08",
+      "notes": "该版本没有一键更新，请谨慎回退",
       "download_url": "https://github.com/hanqey/miloto/archive/refs/tags/v1.1.0.zip"
+    }
+    {
+      "version": "1..0",
+      "updated_at": "2026-08-12",
+      "notes": "修复群聊功能+一点更新",
+      "download_url": "https://github.com/hanqey/miloto/archive/refs/tags/v1.2.0.zip"
     }
   ]
 }
