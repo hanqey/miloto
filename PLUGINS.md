@@ -17,7 +17,6 @@ plugins/
     config.json        # 运行时状态，插件自己读写，别手改
 ```
 
-单文件写法 `plugins/your_plugin.py` 也支持，只适合随手试。正式插件请用文件夹式，便于自带配置和数据文件。
 
 ## 一个最小的插件
 
@@ -77,9 +76,6 @@ class Hello(Star):
 - `on_error(self, hook, exc)`：你的某个钩子抛异常时框架会调它，方便自己兜底（框架已经记了日志）。
 - `on_all_loaded(self)`：所有插件都 `on_load` 完之后调一次，适合做依赖别的插件的初始化，通过 `self.ctx.extensions` 访问其它插件实例。
 
-## 配置
-
-配置分两轨，互不干扰：
 
 **1. 静态配置（`config.yaml` 的 `plugins.<name>` 命名空间）**
 
@@ -159,36 +155,15 @@ class YourPlugin(Star):
 - 后台线程记得在 `on_unload` 停掉；
 - 永远不要直接发消息，只改内容。
 
-## 提交到插件市场（人工审核）
+## 提交到插件市场
 
-Miloto 的插件市场是一个**经过人工审核**的索引，不是谁都能直接塞进去的——这样一键安装才安全可信。流程如下：
+Miloto 的插件市场是一个的索引
+注意作者没用经历保证所有插件都合规，请使用者谨慎下载使用，若发现者可以举报，若被发现，该插件将下架且把该github账户列入插件黑名单。
+流程如下：
 
 1. 把插件源码推到公开的 Git 仓库（GitHub 等），确保带 `manifest.yaml`，`author` / `name` / `version` 写准。
-2. 向上游索引仓库提一个 PR，在 `market.json` 的 `plugins` 数组里加一项，字段至少包含 `name` / `version` / `author` / `desc` / `repo` / `zip_url`；`zip_url` 指向可下载的压缩包（GitHub archive 或 Release 附件），若插件在仓库子目录里用 `subdir` 指明。
-3. 维护者 review 代码，确认无恶意行为、能正常加载后合并。合并后所有客户端在下次刷新市场时就会看到你的插件，状态标「✓ 已审核」。
-4. 未通过审核的不会出现在市场里。
+2. 向上游索引仓库提一个 issue，字段至少包含 `name` / `version` / `author` / `desc` / `repo` / `zip_url`；`zip_url` 指向可下载的压缩包（GitHub archive 或 Release 附件），若插件在仓库子目录里用 `subdir` 指明。
+3. 维护者 review 代码，确认无恶意行为、能正常加载后合并。合并后所有客户端在下次刷新市场时就会看到你的插件。
 
-索引本身只是一份 JSON（放在公开仓库、用 raw 链接被程序拉取），不需要服务器。想自己维护一份私有/第三方源也可以——把你的 `market.json` raw 地址填进配置的 `plugins.market_url` 即可，程序只认这一个源（多源管理后续版本再加）。
+> 注意：安装插件等于在用户机器上运行第三方代码。请作者对自己代码负责；使用者装前可用卡片上的github图标先审一遍。
 
-> 注意：安装插件等于在用户机器上运行第三方代码。即使用户从「已审核」列表装，也请作者对自己代码负责；使用者装前可用卡片上的「查看源码」先审一遍。
-
-## 上手：把索引推到 GitHub（维护者）
-
-市场索引就是一份 `market.json`，放在公开仓库里、用 raw 链接被程序拉取，**不需要服务器**。最小步骤：
-
-1. 注册一个 GitHub 账号（已有可跳过）。
-2. 在 GitHub 上新建一个仓库放这份 `market.json`（可以就是 Miloto 主仓库，也可以单独建一个 `miloto-plugins` 仓库）。把仓库里的 `market.json` 改成你的真实条目（至少 `keyword_replacer` 的 `repo` / `zip_url`）。
-3. 拿到 raw 链接，形如：
-
-   ```
-   https://raw.githubusercontent.com/<你的用户名>/<仓库名>/<分支>/market.json
-   ```
-
-   在仓库文件页面点开 `market.json` → 右上角「Raw」→ 地址栏那条就是。
-
-4. 把这条 raw 链接填进配置的 `plugins.market_url`（或写进 `config.example.yaml` 的默认值）。填好后市场 tab 就能联网拉到列表、一键安装。
-5. 以后要上架新插件：作者 Fork 这个仓库 → 改 `market.json` 加一项 → 提 PR → 你 review 合并。所有客户端下次刷新市场就看到。
-
-**本地自测（还不想碰 GitHub 时）**：开发版把 `config.yaml` 里的 `plugins.market_url` 直接填成 `"market.json"`（相对路径，指向仓库根那份），市场 tab 会读本地文件预览，不依赖网络。这只是开发方便，正式发布还是要走上面的远程 raw 链接。
-
-**多源**：当前 `plugins.market_url` 只认一个源。想让用户自己加第三方源，以后在 WebUI 做「插件源管理」即可（AstrBot 也是这个模式），本版先不做。
