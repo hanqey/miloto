@@ -189,14 +189,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .version-thead{display:grid;grid-template-columns:130px 120px 1fr 110px;gap:12px;padding:11px 16px;background:#f0f6f3;font-size:13px;font-weight:600;color:var(--text-soft)}
 .version-trow{display:grid;grid-template-columns:130px 120px 1fr 110px;gap:12px;padding:11px 16px;font-size:13px;color:var(--text);border-top:1px solid var(--border);align-items:center}
 .version-trow:first-child{border-top:none}
-.vt-ver{font-weight:700;color:var(--brand-ink);font-family:'Quicksand','Segoe UI',sans-serif}
+.vt-ver{font-weight:700;font-size:15px;color:var(--brand-ink);font-family:'Quicksand','Segoe UI',sans-serif}
 .vt-ver .vt-badge{display:inline-block;margin-left:8px;font-size:11px;font-weight:600;padding:1px 8px;border-radius:10px;vertical-align:middle}
 .vt-badge.cur{background:#eaf4ef;color:#3f7d63}
 .vt-badge.up{background:#eaf4ef;color:#4e9d7c}
 .vt-badge.down{background:#f1f3f2;color:#9aa6a0}
 .vt-notes{color:var(--text-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vt-action{display:flex;justify-content:flex-end}
-.vt-current{font-size:12px;font-weight:600;color:#3f7d63;background:#eaf4ef;padding:2px 10px;border-radius:10px}
+.vt-current{display:inline-flex;align-items:center;justify-content:center;min-width:72px;font-size:13px;font-weight:600;color:#3f7d63;background:#eaf4ef;border:1.5px solid #cfe6da;padding:10px 18px;border-radius:var(--radius-sm);cursor:default}
 
 /* ===== 按钮组 ===== */
 .btn{padding:10px 18px;border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s ease;display:inline-flex;align-items:center;gap:6px}
