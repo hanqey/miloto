@@ -1,6 +1,12 @@
 {
-  "latest": "1.2.0",
+  "latest": "1.2.1",
   "versions": [
+    {
+      "version": "1.2.1",
+      "updated_at": "2026-08-13",
+      "notes": "增强检测窗口和支持在微信在托盘下使用",
+      "download_url": "https://github.com/hanqey/miloto/archive/refs/tags/v1.2.1.zip"
+    },
     {
       "version": "1.2.0",
       "updated_at": "2026-08-12",
