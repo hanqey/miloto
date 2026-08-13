@@ -2,7 +2,7 @@
 
 import re
 
-MILOTO_VERSION = "1.2.0"
+MILOTO_VERSION = "1.2.1"
 
 def _tup(v: str):
 
