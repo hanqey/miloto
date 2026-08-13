@@ -9,19 +9,46 @@ from core.loggingx import build_logger
 
 log = build_logger("miloto.win")
 
+class _HwndProxy:
+
+    uia_unavailable = True
+
+    def __init__(self, hwnd: int):
+        self._hwnd = hwnd
+
+    @property
+    def NativeWindowHandle(self) -> int:
+        return self._hwnd
+
+    def Exists(self) -> bool:
+        return True
+
+    def SetFocus(self) -> None:
+        try:
+            ctypes.windll.user32.SetFocus(self._hwnd)
+        except Exception:
+            pass
+
+    def SendKeys(self, *args, **kwargs):
+
+        raise RuntimeError("UIA 不可用：键盘方案应通过剪贴板 Ctrl+V 输入，不走 SendKeys")
+
 EXCLUDE = {"WorkerW", "Progman", "Shell_TrayWnd", "CabinetWClass"}
 
 def find_hwnd() -> int:
 
     user32 = ctypes.windll.user32
 
+    user32.FindWindowW.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p]
+    user32.FindWindowW.restype = ctypes.c_void_p
+
     hwnd = user32.FindWindowW(None, "微信")
     if hwnd:
-        return hwnd
+        return int(hwnd)
 
     hwnd = user32.FindWindowW("Qt51514QWindowIcon", None)
     if hwnd:
-        return hwnd
+        return int(hwnd)
 
     candidates = []
 
@@ -42,11 +69,17 @@ def find_hwnd() -> int:
             return True
 
         title_hit = ("微信" in title) or ("WeChat" in title)
-        cls_hit = clsname == "Qt51514QWindowIcon"
+
+        cls_hit = (
+            clsname == "Qt51514QWindowIcon"
+            or (clsname.startswith("Qt") and clsname.endswith("QWindowIcon"))
+            or clsname == "WeChatMainWndForPC"
+            or "QMainWindow" in clsname
+        )
         if not (title_hit or cls_hit):
             return True
 
-        score = (w * hgt) + (1 << 30 if cls_hit else 0)
+        score = (w * hgt) + (1 << 30 if cls_hit else 0) + (1 << 29 if title_hit else 0)
         candidates.append((h, score))
         return True
 
@@ -103,6 +136,8 @@ def locate() -> object:
         ctrl = reacquire(hwnd)
         if ctrl is not None:
             return ctrl
+
+        return _HwndProxy(hwnd)
 
     try:
         for w in auto.GetRootControl().GetChildren():

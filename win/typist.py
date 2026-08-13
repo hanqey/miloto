@@ -339,6 +339,9 @@ class WeChatSender:
 
     def _find_search_box(self):
 
+        if getattr(self._window, "uia_unavailable", False):
+            return None, []
+
         try:
             box = self._window.EditControl()
             if box is not None and box.Exists():
