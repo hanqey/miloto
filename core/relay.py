@@ -366,11 +366,6 @@ class InboundRelay:
         sender = self.sender
         if not hasattr(sender, "open_chat"):
             return
-        prev_hwnd = None
-        try:
-            prev_hwnd = ctypes.windll.user32.GetForegroundWindow()
-        except Exception:
-            prev_hwnd = None
         with self._dl_lock:
             try:
                 if not sender.open_chat(display_name):
@@ -381,11 +376,6 @@ class InboundRelay:
                 return
 
             time.sleep(5)
-        if prev_hwnd:
-            try:
-                ctypes.windll.user32.SetForegroundWindow(prev_hwnd)
-            except Exception:
-                pass
 
     def _trigger_download(self, display_name, fetch_func, talker):
 
@@ -394,11 +384,6 @@ class InboundRelay:
         sender = self.sender
         if not hasattr(sender, "open_chat"):
             return None
-        prev_hwnd = None
-        try:
-            prev_hwnd = ctypes.windll.user32.GetForegroundWindow()
-        except Exception:
-            prev_hwnd = None
         with self._dl_lock:
             try:
                 if not sender.open_chat(display_name):
@@ -413,12 +398,6 @@ class InboundRelay:
                 path = fetch_func(talker)
             except Exception:
                 path = None
-
-        if prev_hwnd:
-            try:
-                ctypes.windll.user32.SetForegroundWindow(prev_hwnd)
-            except Exception:
-                pass
         return path
 
     def _retry_file_later(self, talker, key, source, group, session, is_group):
