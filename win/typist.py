@@ -258,6 +258,12 @@ class WeChatSender:
             user32.keybd_event(vk, 0, flags, 0)
             time.sleep(0.01)
 
+        for vk in (VK_CONTROL, 0x12, 0x10, 0x5B, 0x5C):
+            try:
+                user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
+            except Exception:
+                pass
+
     def _ensure_foreground(self) -> bool:
 
         hwnd = finder.find_hwnd()

@@ -24,8 +24,9 @@ class _HwndProxy:
         return True
 
     def SetFocus(self) -> None:
+
         try:
-            ctypes.windll.user32.SetFocus(self._hwnd)
+            activate(self)
         except Exception:
             pass
 
@@ -95,17 +96,115 @@ def find_hwnd() -> int:
     candidates.sort(key=lambda x: x[1], reverse=True)
     return candidates[0][0]
 
+def _wake_via_tray_icon(hwnd: int) -> bool:
+
+    try:
+        import uiautomation as auto
+    except Exception:
+        return False
+    try:
+        user32 = ctypes.windll.user32
+
+        def _search(name, cls="SystemTray.NormalButton", max_depth=18):
+
+            try:
+                root = auto.GetRootControl()
+            except Exception:
+                return None
+            stack = [(root, 0)]
+            while stack:
+                ctrl, depth = stack.pop()
+                if depth > max_depth:
+                    continue
+                try:
+                    if (ctrl.Name or "") == name and (ctrl.ClassName or "") == cls:
+                        return ctrl
+                except Exception:
+                    pass
+                try:
+                    for c in ctrl.GetChildren():
+                        stack.append((c, depth + 1))
+                except Exception:
+                    pass
+            return None
+
+        def _click(ctrl):
+            if ctrl is None:
+                return False
+            try:
+                if not ctrl.Exists(0):
+                    return False
+            except Exception:
+                pass
+            for action in ("click", "invoke"):
+                try:
+                    if action == "click":
+                        ctrl.Click()
+                    else:
+                        if not hasattr(ctrl, "Invoke"):
+                            continue
+                        ctrl.Invoke()
+                    return True
+                except Exception:
+                    continue
+
+            try:
+                r = ctrl.BoundingRectangle
+                if r.width() > 0 and r.height() > 0:
+                    cx, cy = r.x + r.width() // 2, r.y + r.height() // 2
+                    user32.SetCursorPos(cx, cy)
+                    user32.mouse_event(0x0002, 0, 0, 0, 0)
+                    user32.mouse_event(0x0004, 0, 0, 0, 0)
+                    return True
+            except Exception:
+                pass
+            return False
+
+        icon = _search("微信", "SystemTray.NormalButton")
+        if icon is None:
+
+            expand = _search("显示隐藏的图标", "SystemTray.NormalButton")
+            if expand is not None:
+                _click(expand)
+
+                for _ in range(20):
+                    time.sleep(0.1)
+                    icon = _search("微信", "SystemTray.NormalButton")
+                    if icon is not None:
+                        break
+                if icon is None:
+                    icon = _search("微信", "SystemTray.NormalButton")
+        if icon is None:
+            return False
+        _click(icon)
+
+        for _ in range(10):
+            time.sleep(0.15)
+            if user32.IsWindowVisible(hwnd):
+                return True
+        return user32.IsWindowVisible(hwnd)
+    except Exception:
+        return False
+
 def restore_window(hwnd: int) -> bool:
 
     user32 = ctypes.windll.user32
-    SW_RESTORE, SW_SHOW = 9, 5
+    SW_RESTORE = 9
     if user32.IsIconic(hwnd):
         user32.ShowWindow(hwnd, SW_RESTORE)
         time.sleep(0.3)
         return True
     if not user32.IsWindowVisible(hwnd):
+
+        if _wake_via_tray_icon(hwnd):
+            return True
+        SW_SHOW, SW_MINIMIZE, SW_RESTORE = 5, 6, 9
         user32.ShowWindow(hwnd, SW_SHOW)
-        time.sleep(0.2)
+        time.sleep(0.05)
+        user32.ShowWindow(hwnd, SW_MINIMIZE)
+        time.sleep(0.08)
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        time.sleep(0.3)
         return True
     return False
 
@@ -161,32 +260,25 @@ def activate(control) -> None:
     if not hwnd:
         return
     user32 = ctypes.windll.user32
-    try:
 
+    try:
         user32.AllowSetForegroundWindow(0xFFFFFFFF)
     except Exception:
         pass
     try:
-        fg = user32.GetForegroundWindow()
-        fg_tid = user32.GetWindowThreadProcessId(fg, None)
-        we_tid = user32.GetWindowThreadProcessId(hwnd, None)
-        attached = False
-        if fg_tid and we_tid and fg_tid != we_tid:
-            try:
-                user32.AttachThreadInput(fg_tid, we_tid, True)
-                attached = True
-            except Exception:
-                pass
-        try:
-            user32.ShowWindow(hwnd, 9)
+
+        user32.ShowWindow(hwnd, 9)
+        for _ in range(5):
             user32.SetForegroundWindow(hwnd)
             user32.BringWindowToTop(hwnd)
-            user32.SetFocus(hwnd)
-        finally:
-            if attached:
-                try:
-                    user32.AttachThreadInput(fg_tid, we_tid, False)
-                except Exception:
-                    pass
+            time.sleep(0.05)
+            try:
+                fg = user32.GetForegroundWindow()
+            except Exception:
+                fg = None
+            if fg == hwnd:
+                break
+
+        time.sleep(0.12)
     except Exception:
         pass
