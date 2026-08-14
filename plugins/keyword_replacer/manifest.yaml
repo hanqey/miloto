@@ -1,6 +1,0 @@
-name: keyword_replacer
-version: 1.0.0
-author: Miloto
-description: 关键词替换示例（内容中间件最小演示）
-miloto_version: ">=0.1.0"
-deps: []
