@@ -7,8 +7,8 @@
       "version": "1.0.0",
       "author": "Miloto",
       "description": "关键词替换示例（内容中间件最小演示）：转发前把消息里的词按规则替换。适合照抄学习插件怎么写。",
-      "repo": "https://github.com/hanqey/miloto",
-      "zip_url": "https://github.com/hanqey/miloto/archive/refs/heads/main.zip",
+      "repo": "https://github.com/hanqey/miloto_keyword_replacer",
+      "zip_url": "https://codeload.github.com/hanqey/miloto_keyword_replacer/zip/refs/heads/main",
       "subdir": "plugins/keyword_replacer",
       "tags": ["示例", "内容改写"],
       "verified": true
