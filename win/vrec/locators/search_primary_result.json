@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "id": "locate_search_primary_result",
+  "base_locator": "search_box_anchors.json",
+  "source_bounds": "reference_bounds",
+  "target": {
+    "left": {"reference": "left", "offset": 52},
+    "top": {"reference": "bottom", "offset": 33},
+    "right": {"reference": "right", "offset": 0},
+    "bottom": {"reference": "bottom", "offset": 97}
+  },
+  "click": {
+    "description": "排除头像和四周边缘后，在第一候选项正文区域随机点击",
+    "x_fraction": [0.15, 0.85],
+    "y_fraction": [0.20, 0.80]
+  },
+  "bounds": {
+    "min_width": 40,
+    "max_width": 500,
+    "min_height": 50,
+    "max_height": 80
+  }
+}

@@ -13,6 +13,7 @@ import uiautomation as auto
 from core.loggingx import build_logger
 from core.runtime import paused
 from win import finder
+from win import visual_switch
 
 INPUT_KEYBOARD = 1
 KEYEVENTF_KEYUP = 0x0002
@@ -40,6 +41,10 @@ class INPUT(ctypes.Structure):
     _fields_ = [("type", ctypes.c_ulong), ("_union", _INPUTUNION)]
 
 log = build_logger("miloto.typist")
+
+def _human_pause(low: float, high: float) -> None:
+
+    time.sleep(random.uniform(low, high))
 
 _MSG_GAP = (0.15, 0.5)
 _COOLDOWN = 0.3
@@ -77,7 +82,7 @@ class WeChatSender:
 
         try:
             self._send_input(VK_RETURN)
-            time.sleep(0.2)
+            _human_pause(0.15, 0.4)
         except Exception as exc:
             log.error(f"发送回车失败: {exc}")
             return False
@@ -196,21 +201,14 @@ class WeChatSender:
     def _switch_contact(self, contact: str) -> bool:
 
         try:
-            self._activate_window()
-            box, diag = self._find_search_box()
-            if box is not None:
-                self._set_value(box, contact)
-                time.sleep(0.4)
-
-                self._window.SendKeys("{Enter}")
-                time.sleep(0.5)
+            hwnd = finder.find_hwnd()
+            if hwnd and visual_switch.switch_contact_visual(contact, hwnd):
                 return True
-
-            if diag:
-                names = "、".join(f"{d[1]!r}@d{d[0]}" for d in diag[:12])
-                log.warning(f"UIA 找不到搜索框（窗口内 Edit: {names}），改用键盘方案")
-            else:
-                log.warning("UIA 找不到搜索框（窗口内无任何 Edit 控件，微信 4.x 常见），改用键盘方案")
+            log.info("[会话切换] 视觉路径未生效，退回键盘方案")
+        except Exception as exc:
+            log.warning("[会话切换] 视觉路径异常，退回键盘：%s", exc)
+        try:
+            self._activate_window()
             return self._switch_contact_keyboard(contact)
         except Exception as exc:
             log.error(f"切换联系人失败: {exc}")
@@ -221,20 +219,30 @@ class WeChatSender:
         try:
             log.debug(f"[键盘] 切换联系人开始: {contact}")
             if not self._ensure_foreground():
-                log.warning("[键盘] 微信窗口未能置前，键可能发丢（手动把微信点出来再试）")
+
+                log.warning("[键盘] 首次置前未成功，等待前台锁放行…")
+                _ok = False
+                for _ in range(12):
+                    time.sleep(0.15)
+                    if self._ensure_foreground():
+                        _ok = True
+                        break
+                if not _ok:
+                    log.error("[键盘] 微信窗口始终未能置前，放弃切会话（避免键发错窗口）")
+                    return False
             self._send_combo(VK_CONTROL, VK_F)
-            time.sleep(0.6)
+            _human_pause(0.4, 0.9)
             log.debug("[键盘] 已发 Ctrl+F（屏幕应出现搜索框聚焦）")
             self._send_combo(VK_CONTROL, VK_A)
-            time.sleep(0.1)
+            _human_pause(0.05, 0.2)
             self._send_input(VK_DELETE)
-            time.sleep(0.2)
+            _human_pause(0.1, 0.35)
             if not self._paste_text(contact):
                 return False
             log.debug(f"[键盘] 已粘贴昵称到搜索框: {contact}（屏幕搜索框应显示该昵称）")
-            time.sleep(0.4)
+            _human_pause(0.25, 0.7)
             self._send_input(VK_RETURN)
-            time.sleep(0.6)
+            _human_pause(0.4, 0.9)
             log.debug(f"[键盘] 已发回车（应打开与 {contact} 的会话，焦点回到输入框）")
             return True
         except Exception as exc:
@@ -289,110 +297,17 @@ class WeChatSender:
 
     def _clip_set_text(self, text: str) -> bool:
 
-        try:
-            import win32clipboard, win32con
-            win32clipboard.OpenClipboard()
-            win32clipboard.EmptyClipboard()
-            win32clipboard.SetClipboardData(win32con.CF_UNICODETEXT, text)
-            win32clipboard.CloseClipboard()
-            return True
-        except Exception:
-            pass
-        try:
-            CF_UNICODETEXT = 13
-            GMEM_MOVEABLE = 0x0042
-            user32 = ctypes.windll.user32
-            kernel32 = ctypes.windll.kernel32
-            if not user32.OpenClipboard(0):
-                return False
-            try:
-                user32.EmptyClipboard()
-                h = kernel32.GlobalAlloc(GMEM_MOVEABLE, (len(text) + 1) * 2)
-                if not h:
-                    return False
-                p = kernel32.GlobalLock(h)
-                if not p:
-                    return False
-                try:
-                    buf = ctypes.create_unicode_buffer(text + "\0")
-                    ctypes.memmove(p, ctypes.addressof(buf), (len(text) + 1) * 2)
-                finally:
-                    kernel32.GlobalUnlock(h)
-                user32.SetClipboardData(CF_UNICODETEXT, h)
-                return True
-            finally:
-                user32.CloseClipboard()
-        except Exception:
-            return False
+        from win import clipboard
+        return clipboard.set_clipboard_text(text)
 
     def _paste_text(self, text: str) -> bool:
 
-        if self._clip_set_text(text):
-            try:
-                self._send_combo(VK_CONTROL, VK_V)
-                time.sleep(0.3)
-                return True
-            except Exception as exc:
-                log.error(f"粘贴失败: {exc}")
-                return False
-        try:
-            self._window.SendKeys(text)
-            time.sleep(0.3)
+        from win import clipboard
+        if clipboard.paste_text(text):
+            _human_pause(0.2, 0.5)
             return True
-        except Exception as exc:
-            log.error(f"粘贴/键入失败: {exc}")
-            return False
-
-    def _find_search_box(self):
-
-        if getattr(self._window, "uia_unavailable", False):
-            return None, []
-
-        try:
-            box = self._window.EditControl()
-            if box is not None and box.Exists():
-                return box, []
-        except Exception:
-            pass
-
-        try:
-            box = self._window.Control(searchDepth=6, ClassName="Edit")
-            if box is not None and box.Exists():
-                return box, []
-        except Exception:
-            pass
-
-        diag = []
-        found = self._walk_edits(self._window, "搜索", 0, 8, diag)
-        if found is not None:
-            return found, diag
-
-        return None, diag
-
-    def _walk_edits(self, node, keyword, depth, max_depth, diag):
-
-        try:
-            is_edit = node.ControlType == auto.ControlType.Edit
-        except Exception:
-            is_edit = False
-        try:
-            name = node.Name or ""
-        except Exception:
-            name = ""
-        if is_edit:
-            diag.append((depth, name))
-            if keyword and keyword in name:
-                return node
-        if depth >= max_depth:
-            return None
-        try:
-            for child in node.GetChildren():
-                res = self._walk_edits(child, keyword, depth + 1, max_depth, diag)
-                if res is not None:
-                    return res
-        except Exception:
-            pass
-        return None
+        log.error("粘贴失败：剪贴板不可用，消息未发送（请检查系统剪贴板是否被占用）")
+        return False
 
     def _activate_window(self) -> None:
 
@@ -411,20 +326,6 @@ class WeChatSender:
         if self._window is not None:
             finder.activate(self._window)
 
-    def _set_value(self, ctrl, text: str) -> None:
-
-        vp = ctrl.GetValuePattern()
-        if vp is not None:
-            vp.SetValue(text)
-        else:
-
-            try:
-                ctrl.SetValue(text)
-            except Exception:
-
-                self._window.SetFocus()
-                ctrl.SendKeys(text)
-
     def _type(self, text: str) -> bool:
 
         try:
@@ -439,17 +340,26 @@ class WeChatSender:
         if not os.path.exists(path):
             log.warning(f"文件不存在: {path}")
             return False
+        from win import clipboard
         try:
             import win32clipboard
             import win32con
             with open(path, "rb") as f:
                 data = f.read()
-            win32clipboard.OpenClipboard()
-            win32clipboard.EmptyClipboard()
-            win32clipboard.SetClipboardData(win32con.CF_DIB, data)
-            win32clipboard.CloseClipboard()
+
+            with clipboard._CLIP_LOCK:
+                try:
+                    win32clipboard.CloseClipboard()
+                except Exception:
+                    pass
+                win32clipboard.OpenClipboard()
+                try:
+                    win32clipboard.EmptyClipboard()
+                    win32clipboard.SetClipboardData(win32con.CF_DIB, data)
+                finally:
+                    win32clipboard.CloseClipboard()
             self._send_combo(VK_CONTROL, VK_V)
-            time.sleep(0.6)
+            _human_pause(0.4, 0.9)
             self._send_input(VK_RETURN)
             return True
         except Exception as exc:

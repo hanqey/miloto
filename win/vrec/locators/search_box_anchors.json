@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "id": "locate_search_box_by_anchors",
+  "click": {
+    "description": "实际点击只能从目标区域中间部分随机取点，避开四周边缘",
+    "x_fraction": [0.18, 0.82],
+    "y_fraction": [0.20, 0.80]
+  },
+  "anchors": {
+    "element1": {
+      "description": "左侧栏右上角的加号",
+      "roi": [0.00, 0.00, 1.00, 0.20],
+      "templates": [
+        {"path": "../templates/anchors/element1_create/plus_25.png", "minimum_score": 0.90, "minimum_margin": 0.01, "coarse_step": 2, "scales": [1.00, 1.25, 1.50, 1.75, 2.00]},
+        {"path": "../templates/anchors/element1_create/plus_27.png", "minimum_score": 0.90, "minimum_margin": 0.01, "coarse_step": 2, "scales": [1.00, 1.25, 1.50, 1.75, 2.00]},
+        {"path": "../templates/anchors/element1_create/plus_selected.png", "minimum_score": 0.90, "minimum_margin": 0.01, "coarse_step": 2, "scales": [1.00, 1.25, 1.50, 1.75, 2.00]}
+      ]
+    },
+    "element2": {
+      "description": "左侧栏的联系人图标",
+      "roi": [0.00, 0.00, 1.00, 1.00],
+      "pixel_roi": [0, 110, 90, 205],
+      "templates": [
+        {"path": "../templates/anchors/element2_contacts/contacts_33x37.png", "minimum_score": 0.90, "minimum_margin": 0.01, "coarse_step": 2, "scales": [1.00, 1.25, 1.50, 1.75, 2.00]},
+        {"path": "../templates/anchors/element2_contacts/contacts_36.png", "minimum_score": 0.90, "minimum_margin": 0.01, "coarse_step": 2, "scales": [1.00, 1.25, 1.50, 1.75, 2.00]},
+        {"path": "../templates/anchors/element2_contacts/contacts_selected.png", "minimum_score": 0.90, "minimum_margin": 0.01, "coarse_step": 2, "scales": [1.00, 1.25, 1.50, 1.75, 2.00]}
+      ]
+    },
+    "element3": {
+      "description": "左侧栏的立方体图标",
+      "roi": [0.00, 0.00, 1.00, 1.00],
+      "pixel_roi": [0, 175, 90, 280],
+      "templates": [
+        {"path": "../templates/anchors/element3_cube/cube_24.png", "minimum_score": 0.90, "minimum_margin": 0.01, "coarse_step": 2, "scales": [1.00, 1.25, 1.50, 1.75, 2.00]},
+        {"path": "../templates/anchors/element3_cube/cube_36.png", "minimum_score": 0.90, "minimum_margin": 0.01, "coarse_step": 2, "scales": [1.00, 1.25, 1.50, 1.75, 2.00]},
+        {"path": "../templates/anchors/element3_cube/cube_selected_29.png", "minimum_score": 0.90, "minimum_margin": 0.01, "coarse_step": 2, "scales": [1.00, 1.25, 1.50, 1.75, 2.00]},
+        {"path": "../templates/anchors/element3_cube/cube_selected_36.png", "minimum_score": 0.90, "minimum_margin": 0.01, "coarse_step": 2, "scales": [1.00, 1.25, 1.50, 1.75, 2.00]}
+      ]
+    },
+    "element4_voice": {
+      "description": "搜索框右侧可能出现的语音输入按钮",
+      "roi": [0.10, 0.05, 1.00, 0.25],
+      "templates": [
+        {"path": "../templates/anchors/element4_voice/microphone_16x17.png", "minimum_score": 0.90, "minimum_margin": 0.01, "coarse_step": 1, "scales": [1.00, 1.25, 1.50, 1.75, 2.00]}
+      ]
+    }
+  },
+  "alternatives": [
+    {
+      "id": "element1_plus_element2",
+      "anchors": ["element1", "element2"],
+      "reference_target": {
+        "left": {"anchor": "element2", "reference": "center_x", "offset": 42},
+        "top": {"anchor": "element1", "reference": "center_y", "offset": -12},
+        "right": {"anchor": "element1", "reference": "center_x", "offset": -23},
+        "bottom": {"anchor": "element1", "reference": "center_y", "offset": 13}
+      },
+      "target": {
+        "left": {"anchor": "element2", "reference": "center_x", "offset": 68},
+        "top": {"anchor": "element1", "reference": "center_y", "offset": -12},
+        "right": {"anchor": "element1", "reference": "center_x", "offset": -23},
+        "bottom": {"anchor": "element1", "reference": "center_y", "offset": 13}
+      },
+      "optional_adjustments": [
+        {"anchor": "element4_voice", "edge": "right", "reference": "left", "offset": -4, "mode": "min"}
+      ],
+      "bounds": {"min_width": 40, "max_width": 500, "min_height": 20, "max_height": 60},
+      "constraints": [
+        {
+          "description": "联系人图标必须位于加号下方的固定工具栏距离内",
+          "left": {"source": "element2", "reference": "center_y"},
+          "right": {"source": "element1", "reference": "center_y"},
+          "min_difference": 90,
+          "max_difference": 125
+        },
+        {
+          "description": "联系人图标必须靠近窗口左边缘",
+          "left": {"source": "element2", "reference": "center_x"},
+          "right": {"source": "image", "reference": "left"},
+          "min_difference": 15,
+          "max_difference": 60
+        }
+      ]
+    },
+    {
+      "id": "element1_plus_element3",
+      "anchors": ["element1", "element3"],
+      "reference_target": {
+        "left": {"anchor": "element3", "reference": "center_x", "offset": 41},
+        "top": {"anchor": "element1", "reference": "center_y", "offset": -12},
+        "right": {"anchor": "element1", "reference": "center_x", "offset": -23},
+        "bottom": {"anchor": "element1", "reference": "center_y", "offset": 13}
+      },
+      "target": {
+        "left": {"anchor": "element3", "reference": "center_x", "offset": 67},
+        "top": {"anchor": "element1", "reference": "center_y", "offset": -12},
+        "right": {"anchor": "element1", "reference": "center_x", "offset": -23},
+        "bottom": {"anchor": "element1", "reference": "center_y", "offset": 13}
+      },
+      "optional_adjustments": [
+        {"anchor": "element4_voice", "edge": "right", "reference": "left", "offset": -4, "mode": "min"}
+      ],
+      "bounds": {"min_width": 40, "max_width": 500, "min_height": 20, "max_height": 60},
+      "constraints": [
+        {
+          "description": "立方体图标必须位于加号下方的固定工具栏距离内",
+          "left": {"source": "element3", "reference": "center_y"},
+          "right": {"source": "element1", "reference": "center_y"},
+          "min_difference": 135,
+          "max_difference": 185
+        },
+        {
+          "description": "立方体图标必须靠近窗口左边缘",
+          "left": {"source": "element3", "reference": "center_x"},
+          "right": {"source": "image", "reference": "left"},
+          "min_difference": 15,
+          "max_difference": 60
+        }
+      ]
+    }
+  ]
+}

@@ -1605,7 +1605,14 @@ function bootApp() {
   if (!getToken()) { showLogin(); return; }
   // 用原生 fetch 探测（避免 api() 的 401 递归弹登录）
   fetch('/api/auth-state').then(function(r){return r.json()}).then(function(s){
-    if (s.must_change_pw) { showForceChange(); return; }
+    if (s.must_change_pw) {
+      // 首次强制改密态：必须先用临时密码登录，再由登录成功的回调拉起改密表单。
+      // 绝不可在这里直接弹改密表单——那样会跳过登录步骤，且残留的旧 token 提交
+      // /api/setup 时因会话失效触发 401 又被弹回登录，表现为「先改密再登录」。
+      // 统一回到登录层，由 doLogin 的 must_change_pw 分支接管改密即可。
+      showLogin();
+      return;
+    }
     var m = document.getElementById('loginMask');
     if (m) m.style.display = 'none';
     startAppLoop();
@@ -1653,11 +1660,9 @@ class WebHandler(BaseHTTPRequestHandler):
             self._serve_version()
         else:
 
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-            self.end_headers()
-            self.wfile.write(PAGE.encode("utf-8"))
+            self._write_response(
+                200, "text/html; charset=utf-8", PAGE.encode("utf-8"),
+                extra_headers=[("Cache-Control", "no-cache, no-store, must-revalidate")])
 
     def do_POST(self):
 
@@ -1927,18 +1932,25 @@ class WebHandler(BaseHTTPRequestHandler):
             body = self._read_body()
             name = str(body.get("name", ""))
             if not name:
+                log.warning("[Web] 安装插件请求缺少 name 参数")
                 self.send_json({"ok": False, "error": "缺少 name 参数"}, 400)
                 return
             market, status = self._load_market_index()
             if status:
+                log.warning("[Web] 插件市场不可用，无法安装")
                 self.send_json({"ok": False, "error": "插件市场当前不可用，无法安装"}, 409)
                 return
-            source = market.get(name)
+
+            market_list = market if isinstance(market, (list, tuple)) else [market]
+            by_name = {p.get("name"): p for p in market_list if isinstance(p, dict)}
+            source = by_name.get(name)
             if not source:
+                log.warning(f"[Web] 市场里找不到插件 {name}")
                 self.send_json({"ok": False, "error": "市场里找不到该插件"}, 404)
                 return
             err = _ENGINE.install_plugin(name, source)
             if err:
+                log.error(f"[Web] 插件安装失败 {name}: {err}")
                 self.send_json({"ok": False, "error": err}, 500)
             else:
                 self.send_json({"ok": True})
@@ -1956,6 +1968,7 @@ class WebHandler(BaseHTTPRequestHandler):
                 return
             err = _ENGINE.uninstall_plugin(name)
             if err:
+                log.error(f"[Web] 插件卸载失败 {name}: {err}")
                 self.send_json({"ok": False, "error": err}, 500)
             else:
                 self.send_json({"ok": True})
@@ -2178,17 +2191,28 @@ class WebHandler(BaseHTTPRequestHandler):
             log.error(f"[Web] 回退失败（目标 {target}）: {message}")
         self.send_json({"ok": ok, "message": message, "target_version": target_version})
 
-    def send_json(self, data, code=200):
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
+    def _write_response(self, code, content_type, body, extra_headers=None):
 
-        origin = self.headers.get("Origin")
-        self.send_header("Access-Control-Allow-Origin", origin or "*")
-        if origin:
-            self.send_header("Access-Control-Allow-Credentials", "true")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", content_type)
+
+            origin = self.headers.get("Origin")
+            self.send_header("Access-Control-Allow-Origin", origin or "*")
+            if origin:
+                self.send_header("Access-Control-Allow-Credentials", "true")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            for k, v in (extra_headers or []):
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(body)
+        except (ConnectionError, BrokenPipeError):
+            log.debug("[Web] 响应写入时客户端已断开，忽略连接中止")
+
+    def send_json(self, data, code=200):
+        self._write_response(
+            code, "application/json; charset=utf-8",
+            json.dumps(data, ensure_ascii=False).encode("utf-8"))
 
     def log_message(self, fmt, *args):
         pass

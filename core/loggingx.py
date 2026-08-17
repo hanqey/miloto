@@ -76,6 +76,14 @@ def _configure_root():
     rb.addFilter(_LEVEL_FILTER)
     root.addHandler(sh)
     root.addHandler(rb)
+
+    for _quiet in ("comtypes", "comtypes._comobject", "uiautomation", "PIL.PngImagePlugin"):
+        try:
+            _q = logging.getLogger(_quiet)
+            _q.setLevel(logging.CRITICAL)
+            _q.propagate = False
+        except Exception:
+            pass
     _ROOT_DONE = True
 
 def build_logger(name: str) -> logging.Logger:

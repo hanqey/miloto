@@ -118,8 +118,21 @@ class Extension:
             d = _os.path.dirname(p)
             if d and not _os.path.isdir(d):
                 _os.makedirs(d, exist_ok=True)
+            existing = {}
+            if _os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as fh:
+                        existing = _json.load(fh) or {}
+                except Exception:
+                    existing = {}
+            if not isinstance(existing, dict):
+                existing = {}
+            if isinstance(data, dict):
+                existing.update(data)
+            else:
+                existing = data
             with open(p, "w", encoding="utf-8") as fh:
-                _json.dump(data, fh, ensure_ascii=False, indent=2)
+                _json.dump(existing, fh, ensure_ascii=False, indent=2)
             return True
         except Exception:
             return False

@@ -9,3 +9,16 @@ Original project:
 
 Akasha-WeChat is also MIT-licensed; its copyright is held by alingalingling.
 Miloto's own code is distributed under the MIT License (see LICENSE).
+
+Visual recognition engine
+=========================
+The visual contact-switching recognizer (win/vrec/) is ported from
+wechat-bridge v3 by the WeChat Bridge contributors, distributed under the
+MIT License.
+
+Original project:
+  https://github.com/misaka16180/wechat-bridge-v3
+
+wechat-bridge v3 is MIT-licensed; copyright (c) 2026 WeChat Bridge contributors.
+Portions of the engine (template matching, anchor-relative and derived
+locators, and their locator JSON / icon templates) remain under that license.

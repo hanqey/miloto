@@ -52,6 +52,40 @@ def build_plugin_context(ctx, name, plugin_config) -> Context:
                    pusher=BlockedSender(name), logger=ctx.log,
                    config=plugin_config or {}, extensions=ctx.extensions)
 
+def _plugin_config_path(pname: str) -> str:
+    pdir = plugins_directory()
+    folder = os.path.join(pdir, pname)
+    if os.path.isdir(folder):
+        return os.path.join(folder, "config.json")
+    return os.path.join(pdir, f"{pname}.config.json")
+
+def read_plugin_file_config(pname: str) -> dict:
+
+    p = _plugin_config_path(pname)
+    if os.path.exists(p):
+        try:
+            with open(p, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+def write_plugin_file_config(pname: str, data: dict) -> None:
+
+    if not isinstance(data, dict):
+        return
+    p = _plugin_config_path(pname)
+    d = os.path.dirname(p)
+    if d and not os.path.isdir(d):
+        os.makedirs(d, exist_ok=True)
+    existing = read_plugin_file_config(pname)
+    if not isinstance(existing, dict):
+        existing = {}
+    existing.update(data)
+    with open(p, "w", encoding="utf-8") as fh:
+        json.dump(existing, fh, ensure_ascii=False, indent=2)
+
 def load_extensions(settings, ctx) -> dict:
 
     loaded = {}
@@ -87,11 +121,13 @@ def load_extensions(settings, ctx) -> dict:
                 discovered.append(entry[:-3])
 
     for plugin_name in sorted(set(discovered)):
-        plugin_config = all_plugin_configs.get(plugin_name, {})
-        turned_off = (isinstance(plugin_config, dict)
-                      and plugin_config.get("enabled", True) is False)
+
+        entry = all_plugin_configs.get(plugin_name, {})
+        turned_off = (isinstance(entry, dict)
+                      and entry.get("enabled", True) is False)
         if turned_off:
             continue
+        plugin_config = read_plugin_file_config(plugin_name)
         try:
             plugin, _manifest = load_plugin_module(
                 plugin_name, plugins_dir, ctx, plugin_config)
@@ -105,7 +141,7 @@ def load_extensions(settings, ctx) -> dict:
     ctx.extensions = loaded
     for name, plugin in loaded.items():
         plugin_ctx = ctx if name in builtin_names else build_plugin_context(
-            ctx, name, all_plugin_configs.get(name, {}))
+            ctx, name, read_plugin_file_config(name))
         plugin.ctx = plugin_ctx
         plugin.log = plugin_ctx.log
         try:
@@ -262,7 +298,9 @@ class Engine:
         self.fanout = FanoutPusher(self.relay)
 
         self.ctx = Context(self.bus, self.settings, self.sender, self.fanout, log)
-        self.extensions = load_extensions(self.settings, self.ctx)
+
+        self.extensions = {}
+        self.reload_extensions()
 
         self._weflow_started = False
         self._tick_started = False
@@ -688,10 +726,7 @@ class Engine:
 
     def _plugin_editable_config(self, pname: str) -> dict:
 
-        pcfg = (self.settings.plugins or {}).get(pname, {})
-        if not isinstance(pcfg, dict):
-            return {}
-        return {k: v for k, v in pcfg.items() if k != "enabled"}
+        return read_plugin_file_config(pname)
 
     def get_plugin_config(self, name: str) -> dict:
 
@@ -700,7 +735,23 @@ class Engine:
 
     def save_plugin_config(self, name: str, cfg: dict) -> str:
 
-        return self.apply_config({"plugins": {name: cfg}})
+        if not isinstance(cfg, dict):
+            return "配置格式错误"
+        try:
+            write_plugin_file_config(name, cfg)
+        except Exception as exc:
+            log.error(f"[插件] 保存配置失败 {name}: {exc}")
+            return f"保存配置失败: {exc}"
+        inst = self.extensions.get(name)
+        if inst is not None:
+            try:
+                new_cfg = read_plugin_file_config(name)
+                if inst.ctx is not None:
+                    inst.ctx.config = new_cfg
+                inst.on_config_change(new_cfg)
+            except Exception as exc:
+                log.warning(f"插件 on_config_change 失败: {name} -> {exc}")
+        return ""
 
     def set_plugin_enabled(self, name: str, enabled: bool) -> str:
 
@@ -709,7 +760,7 @@ class Engine:
     def reload_plugin(self, name: str) -> bool:
 
         plugins_cfg = self.settings.plugins or {}
-        pcfg = plugins_cfg.get(name, {}) or {}
+        file_cfg = read_plugin_file_config(name)
 
         inst = self.extensions.get(name)
         if inst is not None:
@@ -720,13 +771,14 @@ class Engine:
             self.bus.unsubscribe(inst)
             del self.extensions[name]
 
-        if isinstance(pcfg, dict) and pcfg.get("enabled", True) is False:
+        entry = plugins_cfg.get(name, {})
+        if isinstance(entry, dict) and entry.get("enabled", True) is False:
             log.info(f"[插件] {name} 已禁用，重载后保持不加载")
             return True
 
         pdir = plugins_directory()
         try:
-            new_inst, _manifest = load_plugin_module(name, pdir, self.ctx, pcfg)
+            new_inst, _manifest = load_plugin_module(name, pdir, self.ctx, file_cfg)
         except Exception as exc:
             log.error(f"插件重载异常: {name} -> {exc}")
             return False
@@ -734,7 +786,7 @@ class Engine:
             log.error(f"插件重载失败: {name}（模块未返回实例）")
             return False
 
-        pctx = build_plugin_context(self.ctx, name, pcfg)
+        pctx = build_plugin_context(self.ctx, name, file_cfg)
         new_inst.ctx = pctx
         new_inst.log = pctx.log
         try:
@@ -753,10 +805,13 @@ class Engine:
     def install_plugin(self, name: str, source: dict) -> str:
 
         if not name or not isinstance(source, dict):
+            log.error("[插件市场] 安装失败: 缺少插件名或来源")
             return "缺少插件名或来源"
         zip_url = source.get("zip_url") or ""
         if not zip_url:
+            log.error("[插件市场] 安装失败: 该插件未提供 zip_url，无法自动安装")
             return "该插件未提供 zip_url，无法自动安装（可手动把仓库放进 plugins/）"
+        log.info(f"[插件市场] 开始安装 {name} <- {zip_url}")
         import io, zipfile, shutil, urllib.request
         pdir = plugins_directory()
         dest = os.path.join(pdir, name)
@@ -766,18 +821,35 @@ class Engine:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = resp.read()
         except Exception as exc:
+            log.error(f"[插件市场] 安装失败 {name}: 下载 zip 失败 -> {exc}")
             return f"下载失败: {exc}"
 
         try:
             zf = zipfile.ZipFile(io.BytesIO(data))
             names = zf.namelist()
             subdir = (source.get("subdir") or "").strip("/")
+
+            top_dir = ""
+            _dirs = {n.split("/", 1)[0] for n in names if "/" in n}
+            if len(_dirs) == 1:
+                top_dir = _dirs.pop() + "/"
+
+            def _rel(n: str) -> str:
+                return n[len(top_dir):] if (top_dir and n.startswith(top_dir)) else n
+
             if subdir:
 
                 base = next((n for n in names
-                             if n.rstrip("/") == subdir or n.startswith(subdir + "/")), None)
+                             if _rel(n).rstrip("/") == subdir
+                             or _rel(n).startswith(subdir + "/")), None)
                 if base is None:
-                    return f"压缩包内找不到 {subdir}"
+
+                    if top_dir:
+                        log.warning(f"[插件市场] 未找到 subdir={subdir}，回退到压缩包顶层目录 {top_dir}")
+                        base = top_dir
+                    else:
+                        log.error(f"[插件市场] 安装失败 {name}: 压缩包内找不到子目录 {subdir}")
+                        return f"压缩包内找不到 {subdir}"
                 if not base.endswith("/"):
                     base += "/"
             else:
@@ -803,13 +875,47 @@ class Engine:
                         out.write(src.read())
                     written += 1
             if written == 0:
+                log.error(f"[插件市场] 安装失败 {name}: 压缩包内没有可提取的文件")
                 return "压缩包内没有可提取的文件"
         except Exception as exc:
+            log.error(f"[插件市场] 安装失败 {name}: 解压/抽取失败 -> {exc}")
             return f"解压失败: {exc}"
 
         self.reload_plugin(name)
         log.info(f"[插件市场] 已安装 {name}")
         return ""
+
+    def _migrate_legacy_plugin_configs(self) -> None:
+
+        raw = self.settings.data
+        plugins = raw.get("plugins")
+        if not isinstance(plugins, dict):
+            return
+        dirty = False
+        for name, entry in list(plugins.items()):
+            if not isinstance(entry, dict):
+                continue
+            legacy = {k: v for k, v in entry.items() if k != "enabled"}
+            if not legacy:
+                continue
+            try:
+                file_cfg = read_plugin_file_config(name)
+                for k, v in legacy.items():
+                    if k not in file_cfg:
+                        file_cfg[k] = v
+                write_plugin_file_config(name, file_cfg)
+
+                enabled = bool(entry.get("enabled", True))
+                plugins[name] = {"enabled": enabled}
+                dirty = True
+                log.info(f"[插件] 已将 {name} 的旧配置迁移到插件文件夹 config.json")
+            except Exception as exc:
+                log.warning(f"[插件] 迁移 {name} 配置失败: {exc}")
+        if dirty:
+            try:
+                self._write_yaml(raw)
+            except Exception as exc:
+                log.warning(f"[插件] 写回迁移后的 config.yaml 失败: {exc}")
 
     def uninstall_plugin(self, name: str) -> str:
 
@@ -822,13 +928,23 @@ class Engine:
         elif os.path.isfile(single):
             os.remove(single)
         else:
+            log.warning(f"[插件市场] 卸载失败: 未找到插件 {name}")
             return f"未找到插件 {name}"
+
+        try:
+            plugins = self.settings.data.get("plugins")
+            if isinstance(plugins, dict) and name in plugins:
+                del plugins[name]
+                self._write_yaml(self.settings.data)
+        except Exception:
+            pass
         self.reload_extensions()
         log.info(f"[插件市场] 已卸载 {name}")
         return ""
 
     def reload_extensions(self) -> None:
 
+        self._migrate_legacy_plugin_configs()
         old_names = set(self.extensions.keys())
         for name, inst in self.extensions.items():
             try:
